@@ -71,3 +71,37 @@ step "apply-a-terraform-template" {
         }
     }
 }
+
+step "print-terraform-outputs" {
+    name = "Print Terraform Outputs"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                # Retrieve Terraform outputs from previous step
+                $instanceId = $OctopusParameters["Octopus.Action[Apply a Terraform template].Output.TerraformValueOutputs[instance_identifier]"]
+                $password   = $OctopusParameters["Octopus.Action[Apply a Terraform template].Output.TerraformValueOutputs[password]"]
+                $sqlhost       = $OctopusParameters["Octopus.Action[Apply a Terraform template].Output.TerraformValueOutputs[rds_host]"]
+                $port       = $OctopusParameters["Octopus.Action[Apply a Terraform template].Output.TerraformValueOutputs[rds_port]"]
+                $username   = $OctopusParameters["Octopus.Action[Apply a Terraform template].Output.TerraformValueOutputs[username]"]
+                
+                Write-Highlight "=== RDS SQL Server Deployment Output ==="
+                
+                Write-Highlight "Instance Identifier: $instanceId"
+                Write-Highlight "Host:               $sqlhost"
+                Write-Highlight "Port:               $port"
+                Write-Highlight "Username:           $username"
+                Write-Highlight "Password:           $password"
+                
+                Write-Highlight "========================================"
+                
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = "#{parameter.worker.pool}"
+    }
+}
