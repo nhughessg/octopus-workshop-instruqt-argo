@@ -16,6 +16,7 @@ process {
 
         action {
             action_type = "Octopus.TerraformApply"
+            is_disabled = true
             properties = {
                 Octopus.Action.Aws.Region = "eu-west-2"
                 Octopus.Action.AwsAccount.UseInstanceRole = "False"
@@ -47,6 +48,7 @@ process {
 
         action {
             action_type = "Octopus.Script"
+            is_disabled = true
             properties = {
                 Octopus.Action.Script.ScriptBody = <<-EOT
                     # Retrieve Terraform outputs from previous step
