@@ -25,7 +25,7 @@ step "sql-create-database-if-not-exists" {
 process_template "run-a-process-template" {
     name = "Run a Process Template"
     process_template_slug = "flyway-database-migration"
-    version_mask = "2.X"
+    version_mask = "3.X"
 
     package_parameter "parameter.database.package" {
         feed = "github-repository-feed"
@@ -54,5 +54,9 @@ process_template "run-a-process-template" {
 
     parameter "parameter.container.feed" {
         value = "Feeds-1044"
+    }
+
+    parameter "parameter.package.path" {
+        value = "filesystem:#{Octopus.Action.Package[adamoctoclose/octopus-workshop-instruqt-argo].ExtractedPath}/src/database"
     }
 }
