@@ -57,6 +57,237 @@ parameter "parameter.container.feed" {
     label = "Container Feed"
 }
 
+step "sql-create-database-if-not-exists" {
+    name = "SQL - Create Database If Not Exists"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            createCommandTimeout = "30"
+            createDatabaseName = "#{parameter.database.name}"
+            createSqlDatabaseRetryAttempts = "0"
+            createSqlLoginPasswordWhoHasRights = "#{parameter.database.password}"
+            createSqlLoginUserWhoHasCreateUserRights = "#{parameter.database.user}"
+            createSqlServer = "#{parameter.database.host}"
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                if ([string]::IsNullOrWhiteSpace($createSqlLoginUserWhoHasCreateUserRights) -eq $true) {
+                    Write-Output "No username found, using integrated security"
+                    $connectionString = "Server=$createSqlServer;Database=master;integrated security=true;"
+                }
+                else {
+                    Write-Output "Username found, using SQL Authentication"
+                    $connectionString = "Server=$createSqlServer;Database=master;User ID=$createSqlLoginUserWhoHasCreateUserRights;Password=$createSqlLoginPasswordWhoHasRights;"
+                }
+                
+                
+                function Retry-Command {
+                    [CmdletBinding()]
+                    Param(
+                        [Parameter(Position = 0, Mandatory = $true)]
+                        [scriptblock]$ScriptBlock,
+                 
+                        [Parameter(Position = 1, Mandatory = $false)]
+                        [int]$Maximum = 1,
+                
+                        [Parameter(Position = 2, Mandatory = $false)]
+                        [int]$Delay = 100
+                    )
+                
+                    Begin {
+                        $count = 0
+                    }
+                
+                    Process {
+                        $ex = $null
+                        do {
+                            $count++
+                            
+                            try {
+                                Write-Verbose "Attempt $count of $Maximum"
+                                $ScriptBlock.Invoke()
+                                return
+                            }
+                            catch {
+                                $ex = $_
+                                Write-Warning "Error occurred executing command (on attempt $count of $Maximum): $($ex.Exception.Message)"
+                                Start-Sleep -Milliseconds $Delay
+                            }
+                        } while ($count -lt $Maximum)
+                
+                        # Throw an error after $Maximum unsuccessful invocations. Doesn't need
+                        # a condition, since the function returns upon successful invocation.
+                        throw "Execution failed (after $count attempts): $($ex.Exception.Message)"
+                    }
+                }
+                
+                [int]$maximum = 0
+                [int]$delay = 100
+                
+                if (-not [int]::TryParse($createSqlDatabaseRetryAttempts, [ref]$maximum)) { $maximum = 0 }
+                
+                # We add 1 here as if retry attempts is 1, this means we make 2 attempts overall
+                $maximum = $maximum + 1
+                
+                Retry-Command -Maximum $maximum -Delay $delay -ScriptBlock {
+                	
+                    $sqlConnection = New-Object System.Data.SqlClient.SqlConnection
+                    $sqlConnection.ConnectionString = $connectionString
+                    try {
+                        
+                        $command = $sqlConnection.CreateCommand()
+                        $command.CommandType = [System.Data.CommandType]'Text'
+                        $command.CommandTimeout = $createCommandTimeout
+                
+                        Write-Output "Opening the connection to $createSqlServer"
+                        $sqlConnection.Open()
+                
+                        $escapedDatabaseName = $createDatabaseName.Replace("'", "''")
+                
+                        Write-Output "Running the if not exists then create for $createDatabaseName"
+                        $command.CommandText = "IF NOT EXISTS (select Name from sys.databases where Name = '$escapedDatabaseName')
+                        create database [$createDatabaseName]"
+                        
+                        if (![string]::IsNullOrWhiteSpace($createAzureEdition)) {
+                            Write-Verbose "Specifying Azure SqlDb Edition: $($createAzureEdition)"
+                            $command.CommandText += ("`r`n (EDITION = '{0}')" -f $createAzureEdition)
+                        }
+                
+                        if (![string]::IsNullOrWhiteSpace($createAzureBackupStorageRedundancy)) {
+                            Write-Verbose "Specifying Azure Backup storage redundancy: $($createAzureBackupStorageRedundancy)"
+                            $command.CommandText += ("`r`n WITH BACKUP_STORAGE_REDUNDANCY='{0}'" -f $createAzureBackupStorageRedundancy)
+                        }
+                
+                        $command.CommandText += ";"
+                
+                        $result = $command.ExecuteNonQuery()
+                        Write-Verbose "ExecuteNonQuery result: $result"
+                
+                        Write-Output "Successfully executed the database creation script for $createDatabaseName"
+                    }
+                
+                    finally {
+                        if ($null -ne $sqlConnection) {
+                            Write-Output "Closing the connection to $createSqlServer"
+                            $sqlConnection.Dispose()
+                        }
+                    }
+                }
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+        }
+        worker_pool_variable = "#{parameter.worker.pool}"
+
+        community_action_template_snapshot {
+            id = "CommunityActionTemplates-463"
+            version = 5
+
+            parameter "createSqlServer" {
+                display_settings = {
+                    Octopus.ControlType = "SingleLineText"
+                }
+                help_text = "The SQL Server to perform the work on"
+                label = "SQL Server"
+                default_value = ""
+            }
+
+            parameter "createSqlLoginUserWhoHasCreateUserRights" {
+                display_settings = {
+                    Octopus.ControlType = "SingleLineText"
+                }
+                help_text = <<-EOT
+                        The login of the user who has permissions to create a database.
+                        
+                        Leave blank for integrated security
+                        EOT
+                label = "SQL Login"
+                default_value = ""
+            }
+
+            parameter "createSqlLoginPasswordWhoHasRights" {
+                display_settings = {
+                    Octopus.ControlType = "Sensitive"
+                }
+                help_text = <<-EOT
+                        The password of the user who has permissions to create SQL Logins
+                        
+                        Leave blank for integrated security
+                        EOT
+                label = "SQL Password"
+                default_value = ""
+            }
+
+            parameter "createDatabaseName" {
+                display_settings = {
+                    Octopus.ControlType = "SingleLineText"
+                }
+                help_text = "The name of the database to create"
+                label = "Database to create"
+                default_value = ""
+            }
+
+            parameter "createCommandTimeout" {
+                display_settings = {
+                    Octopus.ControlType = "SingleLineText"
+                }
+                help_text = "Number of seconds before throwing a timeout error."
+                label = "Command timeout"
+                default_value = "30"
+            }
+
+            parameter "createAzureEdition" {
+                display_settings = {
+                    Octopus.ControlType = "Select"
+                    Octopus.SelectOptions = <<-EOT
+                        basic|Basic Edition
+                        standard|Standard Edition
+                        premium|Premium Edition
+                        generalpurpose|General Purpose Edition
+                        businesscritical|Business Critical Edition
+                        hyperscale|Hyperscale Edition
+                        EOT
+                }
+                help_text = "Defines the database edition for Azure SQL Databases, leave blank if not using Azure."
+                label = "Azure database edition"
+                default_value = ""
+            }
+
+            parameter "createAzureBackupStorageRedundancy" {
+                display_settings = {
+                    Octopus.ControlType = "Select"
+                    Octopus.SelectOptions = <<-EOT
+                        LOCAL|Locally redundant storage (LRS)
+                        ZONE|Zone-redundant storage (ZRS)
+                        GEO|Geo-redundant storage (GRS)
+                        GEOZONE|Geo-Zone Redundant Storage (GZRS)
+                        EOT
+                }
+                help_text = <<-EOT
+                        Defines the Azure [database backup storage redundancy](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-database-transact-sql?view=azuresqldb-current&tabs=sqlpool#backup_storage_redundancy). The default option is `GRS` when not specified. Leave blank if not using Azure.
+                        
+                        Note: `GZRS` is only available in a subset of Azure regions that have the current requirements: 
+                        
+                        - Database cannot be a `Basic` edition.
+                        - Have a geo-paired region 
+                        - Have multiple availability zones within both data centers (primary and secondary). 
+                        EOT
+                label = "Azure Backup Storage Redundacy"
+                default_value = ""
+            }
+
+            parameter "createSqlDatabaseRetryAttempts" {
+                display_settings = {
+                    Octopus.ControlType = "SingleLineText"
+                }
+                help_text = "Defines if the database creation attempt should be retried one or more times. Default: `0` (e.g. no retry)"
+                label = "Retry database creation attempts"
+                default_value = "0"
+            }
+        }
+    }
+}
+
 step "flyway-database-migrations" {
     name = "Flyway Database Migrations"
 
