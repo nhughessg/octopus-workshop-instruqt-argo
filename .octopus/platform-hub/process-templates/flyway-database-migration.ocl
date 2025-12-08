@@ -67,7 +67,7 @@ parameter "parameter.package.path" {
     value "filesystem:#{Octopus.Action.Package[Flyway.Package.Value].ExtractedPath}/src/database" {}
 }
 
-parameter "paramater.review.environemnt" {
+parameter "paramater.review.environement" {
     display_settings = {
         Octopus.ControlType = "Environments"
     }
