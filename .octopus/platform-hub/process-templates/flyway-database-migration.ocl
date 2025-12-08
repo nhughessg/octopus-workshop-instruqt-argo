@@ -1474,6 +1474,7 @@ step "review-database-changes" {
 
     action {
         action_type = "Octopus.Manual"
+        environments_variable = "#{paramater.review.environement}"
         properties = {
             Octopus.Action.Manual.BlockConcurrentDeployments = "False"
             Octopus.Action.Manual.Instructions = "Please review Database changes"
