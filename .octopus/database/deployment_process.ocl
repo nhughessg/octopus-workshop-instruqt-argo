@@ -21,7 +21,7 @@ process_template "run-a-process-template" {
     }
 
     parameter "parameter.database.password" {
-        value = "#{Flyway.PAT}"
+        value = "#{SQLServer.Database.Password}"
     }
 
     parameter "parameter.database.host" {
