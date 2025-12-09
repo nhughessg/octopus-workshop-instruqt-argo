@@ -33,7 +33,7 @@ process {
         }
 
         parameter "parameter.respositry.url" {
-            value = "https://github.com/nuhghessg/octopus-workshop-instruqt-argo"
+            value = "https://github.com/nhughessg/octopus-workshop-instruqt-argo"
         }
     }
 }
